@@ -4,12 +4,9 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { openDatabaseSync } from 'expo-sqlite';
 import { parseCsv, toTrades, byOrder, roundTrips, report } from '../journal.mjs';
-
-const db = openDatabaseSync('journal.db');
-db.execSync(`CREATE TABLE IF NOT EXISTS trades (
-  id TEXT PRIMARY KEY, ord TEXT, symbol TEXT, side TEXT, qty REAL, price REAL, time INTEGER)`);
+import { db } from './db';
+import Signals from './Signals';
 
 const LIGHT = { bg: '#f6f4ef', card: '#fff', ink: '#1d1c1a', mute: '#77736b', line: '#e4e0d7', up: '#1f7a4d', down: '#b3361f', accent: '#c98a12' };
 const DARK = { bg: '#141413', card: '#1e1d1b', ink: '#ece9e2', mute: '#9a958b', line: '#2e2c29', up: '#4cc38a', down: '#f07a5f', accent: '#e0a42a' };
@@ -26,6 +23,27 @@ function load() {
 export default function App() {
   const c = useColorScheme() === 'dark' ? DARK : LIGHT;
   const s = useMemo(() => styles(c), [c]);
+  const [tab, setTab] = useState('signals');
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={s.root} edges={['top', 'bottom']}>
+        <StatusBar style={c === DARK ? 'light' : 'dark'} />
+        <View style={s.tabs}>
+          {[['signals', 'Signals'], ['journal', 'Journal']].map(([id, label]) => (
+            <Pressable key={id} onPress={() => setTab(id)} style={[s.tab, tab === id && { borderBottomColor: c.accent }]}>
+              <Text style={[s.tabText, tab === id && { color: c.ink }]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
+          {tab === 'signals' ? <Signals c={c} s={s} /> : <Journal c={c} s={s} />}
+        </ScrollView>
+      </SafeAreaView>
+    </SafeAreaProvider>
+  );
+}
+
+function Journal({ c, s }) {
   const [tick, setTick] = useState(0);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,11 +82,8 @@ export default function App() {
 
   const sum = r.summary;
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={s.root} edges={['top', 'bottom']}>
-        <StatusBar style={c === DARK ? 'light' : 'dark'} />
-        <ScrollView contentContainerStyle={s.page}>
-          <Text style={s.h1}>Trade Journal</Text>
+    <>
+          <Text style={s.h1}>Journal</Text>
           <Text style={s.mute}>Gross P&L before charges. Zerodha: Console → Reports → Tradebook → download CSV.</Text>
 
           <Pressable style={({ pressed }) => [s.btn, (pressed || busy) && { opacity: 0.6 }]} onPress={importCsv} disabled={busy}>
@@ -132,9 +147,7 @@ export default function App() {
               <Text style={{ color: c.down }}>Delete all imported trades</Text>
             </Pressable>
           )}
-        </ScrollView>
-      </SafeAreaView>
-    </SafeAreaProvider>
+    </>
   );
 }
 
@@ -208,4 +221,9 @@ const styles = c => StyleSheet.create({
   trip: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 9, borderBottomColor: c.line, borderBottomWidth: StyleSheet.hairlineWidth },
   cell: { color: c.ink, fontSize: 14, fontVariant: ['tabular-nums'] },
   num: { flex: 1, textAlign: 'right' },
+  tabs: { flexDirection: 'row', borderBottomColor: c.line, borderBottomWidth: 1, paddingHorizontal: 8 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabText: { color: c.mute, fontWeight: '600', fontSize: 15 },
+  input: { backgroundColor: c.card, borderColor: c.line, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: c.ink, fontSize: 15, marginTop: 4 },
+  smallBtn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 8, alignItems: 'center' },
 });
