@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { indicators, simulate, backtest, scan, paperStatus, parseYahoo, SETUPS, verdict, scoreboard, isSymbol } from './scanner.mjs';
+import { indicators, simulate, backtest, scan, paperStatus, parseYahoo, SETUPS, verdict, scoreboard, isSymbol, paperReadiness } from './scanner.mjs';
 
 const DAY = 86400e3;
 // 300 days of steady uptrend with small wiggles, then a volume breakout on the last day
@@ -53,6 +53,15 @@ assert.equal(sb.length, SETUPS.length);
 const one = backtest(x, SETUPS[1]);
 assert.equal(sb.find(r => r.id === SETUPS[1].id).n, one.n * 2, 'pools trades across stocks, skips short history');
 assert.ok(isSymbol('M&M') && isSymbol('BAJAJ-AUTO') && !isSymbol('reliance') && !isSymbol('A B'));
+
+assert.equal(b.recent.length, 60);
+assert.equal(b.recent.at(-1), 174);
+const pr = (n, pnl) => Array.from({ length: n }, () => ({ pnl, entry: 100, qty: 10 }));
+assert.equal(paperReadiness(pr(5, 50)).ready, false);
+assert.match(paperReadiness(pr(19, 50)).label, /^1 more closed paper trade before/);
+assert.equal(paperReadiness(pr(20, 50)).ready, true);
+assert.equal(paperReadiness([...pr(10, 50), ...pr(10, -80)]).ready, false, 'net loser is not ready');
+assert.equal(paperReadiness(pr(20, 50)).avgPct, 5);
 
 assert.throws(() => parseYahoo({ chart: { error: { description: 'No data found' } } }), /No data found/);
 console.log('scanner checks passed');

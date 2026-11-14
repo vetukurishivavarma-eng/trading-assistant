@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { NIFTY50, fetchAll, scan, paperStatus, scoreboard, isSymbol } from '../scanner.mjs';
+import { NIFTY50, fetchAll, scan, paperStatus, scoreboard, isSymbol, paperReadiness } from '../scanner.mjs';
 import { db, getSetting, setSetting } from './db';
 import { showDialog } from './dialog';
 
@@ -21,6 +21,30 @@ async function ensureReminder() {
       trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday, hour: 16, minute: 0, channelId: 'scan' },
     });
   setSetting('reminder', '1');
+}
+
+// Last ~3 months of closes as thin bars, with entry/stop/target lines. Plain views, no chart library.
+function MiniChart({ g, c }) {
+  const H = 110, vals = g.recent;
+  if (!vals?.length) return null;
+  const lo = Math.min(...vals, g.stop), hi = Math.max(...vals, g.target), span = hi - lo || 1;
+  const y = v => ((hi - v) / span) * H;
+  const line = (v, color, label) => (
+    <View key={label} style={{ position: 'absolute', left: 0, right: 0, top: y(v) }}>
+      <View style={{ height: 1.5, backgroundColor: color, opacity: 0.9 }} />
+      <Text style={{ position: 'absolute', right: 2, top: -15, fontSize: 10, color, fontWeight: '700' }}>{label} {Math.round(v)}</Text>
+    </View>
+  );
+  return (
+    <View style={{ height: H, marginTop: 10, flexDirection: 'row', alignItems: 'flex-end' }}>
+      {vals.map((v, i) => (
+        <View key={i} style={{ flex: 1, marginHorizontal: 0.5, height: Math.max(1, H - y(v)), backgroundColor: c.line }} />
+      ))}
+      {line(g.target, c.up, 'Target')}
+      {line(g.close, c.accent, 'Entry ~')}
+      {line(g.stop, c.down, 'Stop')}
+    </View>
+  );
 }
 
 const loadPaper = () => db.getAllSync('SELECT * FROM paper ORDER BY id DESC').map(p => ({ ...p, st: JSON.parse(p.status || '{"status":"pending"}') }));
@@ -87,6 +111,7 @@ Use the NSE code, e.g. ZOMATO, IRCTC, TATAPOWER.`);
     const closed = paper.filter(p => ['stop', 'target', 'time'].includes(p.st.status));
     const open = paper.filter(p => p.st.status === 'open');
     return {
+      readiness: paperReadiness(closed.map(p => ({ pnl: p.st.pnl, entry: p.st.entry, qty: p.qty }))),
       closed: closed.length, wins: closed.filter(p => p.st.pnl > 0).length,
       realised: closed.reduce((a, p) => a + p.st.pnl, 0), unrealised: open.reduce((a, p) => a + p.st.pnl, 0),
     };
@@ -168,6 +193,8 @@ Use the NSE code, e.g. ZOMATO, IRCTC, TATAPOWER.`);
           <Text style={[s.cell, { marginTop: 6, lineHeight: 20 }]}>
             Plan: buy {g.qty} at tomorrow's open (~{inr(g.close)}) · stop {inr(g.stop)} · target {inr(g.target)} · max loss ~{inr(g.qty * (g.close - g.stop))}
           </Text>
+          <MiniChart g={g} c={c} />
+          <Text style={[s.small, { marginTop: 4 }]}>Last 3 months of closing prices</Text>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
             <Pressable onPress={() => approve(g)} style={[s.smallBtn, { backgroundColor: c.accent }]}><Text style={s.btnText}>Paper trade</Text></Pressable>
             <Pressable onPress={() => setSkipped(x => ({ ...x, [g.symbol + g.setup]: true }))} style={[s.smallBtn, { borderColor: c.line, borderWidth: 1 }]}><Text style={s.cell}>Skip</Text></Pressable>
@@ -181,6 +208,14 @@ Use the NSE code, e.g. ZOMATO, IRCTC, TATAPOWER.`);
           <Text style={[s.cell, { marginBottom: 8 }]}>
             Closed {paperStats.closed} (won {paperStats.wins}) · realised {inr(paperStats.realised)} · open {inr(paperStats.unrealised)}
           </Text>
+          <View style={[s.flag, { borderLeftColor: paperStats.readiness.ready ? c.up : c.accent }]}>
+            <Text style={[s.cell, { fontWeight: '700' }]}>Ready for real money?</Text>
+            <Text style={[s.cell, { marginTop: 4, lineHeight: 20 }]}>
+              {paperStats.readiness.n >= 20
+                ? `${paperStats.readiness.n} closed: won ${paperStats.readiness.winRate}%, average ${pct(paperStats.readiness.avgPct)} per trade, total ${inr(paperStats.readiness.total)}. `
+                : ''}{paperStats.readiness.label}
+            </Text>
+          </View>
           <View style={s.table}>
             {paper.map(p => {
               const st = p.st, label = { pending: 'waiting for next open', open: 'open', stop: 'stopped out', target: 'hit target', time: 'closed after 20 days' }[st.status];

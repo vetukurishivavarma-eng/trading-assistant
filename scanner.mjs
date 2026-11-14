@@ -141,7 +141,7 @@ export function scan(symbol, k, { capital = 100000, riskPct = 1 } = {}) {
     return {
       symbol, setup: s.id, name: s.name, why: s.why, date: k[i].t, close, atr: a,
       stop: close - riskPerShare, target: close + TARGET_ATR * a, qty,
-      history, verdict: verdict(history),
+      history, verdict: verdict(history), recent: k.slice(-60).map(d => d.c),
     };
   });
 }
@@ -163,6 +163,20 @@ export function scoreboard(candlesBySymbol) {
     id: a.id, name: a.name, n: a.n, stocks: a.stocks, stocksUp: a.stocksUp,
     winRate: a.n ? Math.round((a.wins / a.n) * 100) : 0, avgPct: a.n ? a.sum / a.n : 0,
   }));
+}
+
+// Paper-trading checkpoint: rule-based, not advice. Needs enough closed trades before saying anything.
+export const PAPER_MIN = 20;
+export function paperReadiness(closed) { // closed: [{ pnl, entry, qty }]
+  const n = closed.length;
+  if (n < PAPER_MIN) return { n, ready: false, label: `${PAPER_MIN - n} more closed paper trade${PAPER_MIN - n === 1 ? '' : 's'} before judging` };
+  const rets = closed.map(t => (t.pnl / (t.entry * t.qty)) * 100);
+  const avgPct = rets.reduce((a, b) => a + b, 0) / n, winRate = Math.round((rets.filter(r => r > 0).length / n) * 100);
+  const total = closed.reduce((a, t) => a + t.pnl, 0);
+  const ready = avgPct > 0 && total > 0;
+  return { n, avgPct, winRate, total, ready,
+    label: ready ? 'Paper results are positive. If you go live, start with small size and keep the same rules.'
+      : 'Paper results are not positive yet. Keep paper trading, or skip the weaker setups.' };
 }
 
 export const isSymbol = s => /^[A-Z0-9&-]{1,20}$/.test(s);
