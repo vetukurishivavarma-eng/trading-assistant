@@ -1,0 +1,8 @@
+{
+  "name": "trading-assistant",
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs"
+  }
+}
