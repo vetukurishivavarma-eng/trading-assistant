@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { indicators, simulate, backtest, scan, paperStatus, parseYahoo, SETUPS, verdict } from './scanner.mjs';
+import { indicators, simulate, backtest, scan, paperStatus, parseYahoo, SETUPS, verdict, scoreboard, isSymbol } from './scanner.mjs';
 
 const DAY = 86400e3;
 // 300 days of steady uptrend with small wiggles, then a volume breakout on the last day
@@ -47,6 +47,12 @@ const today930 = Date.parse('2026-11-16T09:15:00+05:30') / 1000, prev = today930
 const yj = { chart: { result: [{ timestamp: [prev, today930], indicators: { quote: [{ open: [1, 2], high: [1, 2], low: [1, 2], close: [1, 2], volume: [1, 1] }] } }] } };
 assert.equal(parseYahoo(yj, Date.parse('2026-11-16T11:00:00+05:30')).length, 1, 'mid-session candle dropped');
 assert.equal(parseYahoo(yj, Date.parse('2026-11-16T17:00:00+05:30')).length, 2, 'after close kept');
+
+const sb = scoreboard({ A: k, B: k, short: k.slice(0, 100) });
+assert.equal(sb.length, SETUPS.length);
+const one = backtest(x, SETUPS[1]);
+assert.equal(sb.find(r => r.id === SETUPS[1].id).n, one.n * 2, 'pools trades across stocks, skips short history');
+assert.ok(isSymbol('M&M') && isSymbol('BAJAJ-AUTO') && !isSymbol('reliance') && !isSymbol('A B'));
 
 assert.throws(() => parseYahoo({ chart: { error: { description: 'No data found' } } }), /No data found/);
 console.log('scanner checks passed');

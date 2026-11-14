@@ -146,6 +146,27 @@ export function scan(symbol, k, { capital = 100000, riskPct = 1 } = {}) {
   });
 }
 
+// How each setup did across the whole watchlist (pooled trades, trade-weighted).
+export function scoreboard(candlesBySymbol) {
+  const acc = Object.fromEntries(SETUPS.map(s => [s.id, { id: s.id, name: s.name, n: 0, wins: 0, sum: 0, stocks: 0, stocksUp: 0 }]));
+  for (const k of Object.values(candlesBySymbol)) {
+    if (k.length < 260) continue;
+    const x = indicators(k);
+    for (const s of SETUPS) {
+      const h = backtest(x, s), a = acc[s.id];
+      if (!h.n) continue;
+      a.n += h.n; a.wins += Math.round((h.winRate / 100) * h.n); a.sum += h.avgPct * h.n;
+      a.stocks++; if (h.avgPct > 0) a.stocksUp++;
+    }
+  }
+  return Object.values(acc).map(a => ({
+    id: a.id, name: a.name, n: a.n, stocks: a.stocks, stocksUp: a.stocksUp,
+    winRate: a.n ? Math.round((a.wins / a.n) * 100) : 0, avgPct: a.n ? a.sum / a.n : 0,
+  }));
+}
+
+export const isSymbol = s => /^[A-Z0-9&-]{1,20}$/.test(s);
+
 // Paper trade lifecycle, same rules as the backtest: fills at the open after the signal day.
 export function paperStatus(trade, k) {
   const entryIdx = k.findIndex(d => d.t > trade.signalDate);

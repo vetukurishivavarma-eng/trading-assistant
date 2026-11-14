@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { NIFTY50, fetchAll, scan, paperStatus } from '../scanner.mjs';
+import { NIFTY50, fetchAll, scan, paperStatus, scoreboard, isSymbol } from '../scanner.mjs';
 import { db, getSetting, setSetting } from './db';
 import { showDialog } from './dialog';
 
@@ -32,6 +32,8 @@ export default function Signals({ c, s }) {
   const [result, setResult] = useState(null);
   const [skipped, setSkipped] = useState({});
   const [paper, setPaper] = useState(loadPaper);
+  const [extra, setExtra] = useState(getSetting('extra', ''));
+  const [help, setHelp] = useState(false);
   const tone = { good: c.up, meh: c.accent, bad: c.down };
 
   useEffect(() => { ensureReminder().catch(() => {}); }, []);
@@ -39,7 +41,13 @@ export default function Signals({ c, s }) {
   async function runScan() {
     const cap = Math.max(1000, Number(capital) || 100000), rk = Math.min(5, Math.max(0.1, Number(risk) || 1));
     setSetting('capital', cap); setSetting('risk', rk);
-    const symbols = [...new Set([...NIFTY50, ...paper.filter(p => !['stop', 'target', 'time'].includes(p.st.status)).map(p => p.symbol)])];
+    const mine = extra.toUpperCase().split(/[s,]+/).filter(Boolean);
+    const bad = mine.filter(x => !isSymbol(x));
+    if (bad.length) return showDialog('Check your stocks', `These don't look like NSE symbols: ${bad.join(', ')}
+
+Use the NSE code, e.g. ZOMATO, IRCTC, TATAPOWER.`);
+    setExtra(mine.join(', ')); setSetting('extra', mine.join(', '));
+    const symbols = [...new Set([...NIFTY50, ...mine, ...paper.filter(p => !['stop', 'target', 'time'].includes(p.st.status)).map(p => p.symbol)])];
     setBusy('Starting…');
     try {
       const { candles, errors } = await fetchAll(symbols, fetch, (d, n) => setBusy(`Fetching ${d}/${n}`));
@@ -51,7 +59,7 @@ export default function Signals({ c, s }) {
       for (const p of paper) if (candles[p.symbol])
         db.runSync('UPDATE paper SET status = ? WHERE id = ?', JSON.stringify(paperStatus({ signalDate: p.signal_date, atr: p.atr, qty: p.qty }, candles[p.symbol])), p.id);
       const anyK = Object.values(candles)[0];
-      setResult({ signals, errors, asOf: anyK?.at(-1)?.t, at: Date.now() });
+      setResult({ signals, errors, asOf: anyK?.at(-1)?.t, at: Date.now(), board: scoreboard(candles) });
       setPaper(loadPaper());
     } catch (e) {
       showDialog('Scan failed', e.message);
@@ -90,6 +98,23 @@ export default function Signals({ c, s }) {
     <>
       <Text style={s.h1}>Signals</Text>
       <Text style={s.mute}>Swing setups on Nifty 50 daily candles. Each one is checked against what happened the last times it fired on that stock. Rules and history, not advice: paper trade first.</Text>
+      <Pressable onPress={() => setHelp(h => !h)} style={{ marginTop: 8 }}>
+        <Text style={{ color: c.accent, fontWeight: '600' }}>{help ? 'Hide explanations' : 'What do these mean?'}</Text>
+      </Pressable>
+      {help && (
+        <View style={[s.card, { width: '100%', marginTop: 8 }]}>
+          {[
+            ['Swing trade', 'Buy and hold for a few days to a few weeks, not intraday. You only need to check once a day after 4 pm.'],
+            ['Stop-loss', 'The price where you accept you were wrong and sell, to keep a loss small. Here it is 2 × the stock’s normal daily move (ATR) below entry.'],
+            ['Target', 'The price where you take profit: 3 × ATR above entry, so a win is bigger than a loss.'],
+            ['Risk per trade %', 'How much of your capital one bad trade may cost. 1% of ₹1,00,000 = ₹1,000. The app sizes the quantity so hitting the stop loses about that.'],
+            ['Win rate / average', 'From replaying the same rule on that stock’s last ~10 years: how often it made money, and the average result per trade after ~0.25% costs.'],
+            ['Paper trade', 'Pretend money. The app tracks it with real prices so you learn whether the signals work before risking cash.'],
+          ].map(([k, v]) => (
+            <Text key={k} style={[s.cell, { marginBottom: 8, lineHeight: 20 }]}><Text style={{ fontWeight: '700' }}>{k}: </Text>{v}</Text>
+          ))}
+        </View>
+      )}
 
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
         <View style={{ flex: 1 }}>
@@ -102,6 +127,9 @@ export default function Signals({ c, s }) {
         </View>
       </View>
 
+      <Text style={[s.small, { marginTop: 10 }]}>Your extra stocks (NSE codes, comma separated)</Text>
+      <TextInput style={s.input} autoCapitalize="characters" autoCorrect={false} placeholder="e.g. IRCTC, TATAPOWER" placeholderTextColor={c.mute} value={extra} onChangeText={setExtra} />
+
       <Pressable style={({ pressed }) => [s.btn, (pressed || busy) && { opacity: 0.6 }]} onPress={runScan} disabled={!!busy}>
         <Text style={s.btnText}>{busy || 'Scan Nifty 50'}</Text>
       </Pressable>
@@ -111,6 +139,18 @@ export default function Signals({ c, s }) {
           Candles up to {day(result.asOf)} · {result.signals.length} setup{result.signals.length === 1 ? '' : 's'} today
           {result.errors.length ? ` · ${result.errors.length} stocks failed to load` : ''}
         </Text>
+      )}
+      {result?.board && (
+        <View style={[s.card, { width: '100%', marginTop: 10 }]}>
+          <Text style={[s.cell, { fontWeight: '700', marginBottom: 6 }]}>How each setup did on these stocks (~10 years)</Text>
+          {result.board.map(b => (
+            <Text key={b.id} style={[s.cell, { lineHeight: 21 }]}>
+              <Text style={{ fontWeight: '600' }}>{b.name}: </Text>
+              <Text style={{ color: b.avgPct > 0 ? c.up : c.down }}>{pct(b.avgPct)}</Text> per trade, won {b.winRate}% of {b.n}, made money on {b.stocksUp}/{b.stocks} stocks
+            </Text>
+          ))}
+          <Text style={[s.small, { marginTop: 6, lineHeight: 17 }]}>Small edges are normal: even good setups win only about half the time. The stop-loss keeps losers small so winners can pay for them.</Text>
+        </View>
       )}
       {result && !visible.length && <Text style={[s.flag, { marginTop: 10 }]}>Nothing today. No setup is also a signal: sitting out is a position.</Text>}
 
