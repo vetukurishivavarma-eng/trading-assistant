@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseCsv, toTrades, byOrder, roundTrips, report } from './journal.mjs';
+import { parseCsv, toTrades, byOrder, roundTrips, report, charges, kindOf } from './journal.mjs';
 
 const csv = `symbol,isin,trade_date,exchange,segment,series,trade_type,auction,quantity,price,trade_id,order_id,order_execution_time
 INFY,X,2026-11-02,NSE,EQ,EQ,buy,false,5,100,t1,o1,2026-11-02T09:20:00
@@ -23,9 +23,19 @@ assert.equal(trips[1].pnl, (200 - 190) * 30, 'short win');
 assert.deepEqual(open.map(o => [o.symbol, o.qty]), [['NIFTY26NOVFUT', -20]], 'partial short still open');
 
 const r = report(trips, { revengeMin: 15 });
-assert.equal(r.summary.pnl, -60 + 300);
-assert.equal(r.summary.maxDD, 60);
-assert.equal(r.equity.at(-1), 240);
+assert.equal(r.summary.gross, -60 + 300);
+const fees = charges(trips[0]) + charges(trips[1]);
+assert.ok(Math.abs(r.summary.pnl - (240 - fees)) < 1e-9, 'pnl is net of charges');
+assert.ok(Math.abs(r.equity.at(-1) - r.summary.pnl) < 1e-9);
+assert.equal(kindOf(trips[0]), 'intra'); assert.equal(kindOf(trips[1]), 'fut');
+assert.ok(trips[0] && r.trips.every(x => x.gross - x.charges === x.pnl));
+
+// delivery, 10 @ 100 -> 110 two days later: STT 2.1 + exch 0.06237 + SEBI 0.0021 + GST 0.011605 + stamp 0.15 + DP 18.1012
+const d = charges({ symbol: 'INFY', side: 'long', qty: 10, entry: 100, exit: 110, openedAt: Date.parse('2026-11-02T10:00'), closedAt: Date.parse('2026-11-04T10:00') });
+assert.ok(Math.abs(d - 20.427175) < 1e-4, 'delivery charges ' + d);
+// option buyer, 75 @ 100 -> 120: brokerage 40 + STT 9 + exch 5.77995 + SEBI 0.0165 + GST 8.24339 + stamp 0.225
+const o = charges({ symbol: 'NIFTY26NOV24000CE', side: 'long', qty: 75, entry: 100, exit: 120, openedAt: 0, closedAt: 0 });
+assert.ok(Math.abs(o - 63.26484) < 1e-4, 'option charges ' + o);
 
 // revenge flag: 3 trades opened within 15 min of a loss
 const t0 = Date.parse('2026-11-03T09:30:00');

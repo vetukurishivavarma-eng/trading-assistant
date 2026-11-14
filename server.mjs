@@ -37,7 +37,8 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/api/report') {
       const rows = db.prepare('SELECT id, ord AS "order", symbol, side, qty, price, time FROM trades').all();
       const { trips, open } = roundTrips(byOrder(rows));
-      return send(res, 200, { ...report(trips), trips: trips.slice(-300).reverse(), open, fills: rows.length });
+      const r = report(trips);
+      return send(res, 200, { ...r, trips: r.trips.slice(-300).reverse(), open, fills: rows.length });
     }
 
     send(res, 404, { error: 'not found' });

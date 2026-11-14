@@ -19,7 +19,8 @@ const dt = ms => new Date(ms).toLocaleString('en-IN', { day: 'numeric', month: '
 function load() {
   const rows = db.getAllSync('SELECT id, ord AS "order", symbol, side, qty, price, time FROM trades');
   const { trips, open } = roundTrips(byOrder(rows));
-  return { ...report(trips), trips: trips.slice(-100).reverse(), open, fills: rows.length };
+  const r = report(trips);
+  return { ...r, trips: r.trips.slice(-100).reverse(), open, fills: rows.length };
 }
 
 export default function App() {
@@ -89,7 +90,7 @@ function Journal({ c, s }) {
   return (
     <>
           <Text style={s.h1}>Journal</Text>
-          <Text style={s.mute}>Gross P&L before charges. Zerodha: Console → Reports → Tradebook → download CSV.</Text>
+          <Text style={s.mute}>P&L after estimated charges (brokerage, STT, exchange, GST, stamp, DP). Zerodha: Console → Reports → Tradebook → download CSV.</Text>
 
           <Pressable style={({ pressed }) => [s.btn, (pressed || busy) && { opacity: 0.6 }]} onPress={importCsv} disabled={busy}>
             <Text style={s.btnText}>{busy ? 'Importing…' : 'Import tradebook CSV'}</Text>
@@ -102,6 +103,7 @@ function Journal({ c, s }) {
             <>
               <View style={s.cards}>
                 <Card s={s} label="Net P&L" value={inr(sum.pnl)} color={pnlColor(sum.pnl)} />
+                <Card s={s} label="Charges (est.)" value={inr(-sum.charges)} color={c.down} />
                 <Card s={s} label="Trades" value={String(sum.n)} />
                 <Card s={s} label="Win rate" value={`${sum.winRate}%`} />
                 <Card s={s} label="Profit factor" value={sum.profitFactor == null ? '—' : sum.profitFactor.toFixed(2)} />

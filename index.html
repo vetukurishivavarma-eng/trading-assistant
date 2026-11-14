@@ -33,7 +33,7 @@
 <body>
 <main>
   <h1>Trade Journal</h1>
-  <div class="mute">Gross P&amp;L before charges. Zerodha: Console → Reports → Tradebook → download CSV.</div>
+  <div class="mute">P&amp;L after estimated charges (brokerage, STT, exchange, GST, stamp, DP). Zerodha: Console → Reports → Tradebook → download CSV.</div>
   <label class="drop">Import tradebook CSV files (re-importing the same file is safe) <input type="file" accept=".csv" multiple id="file"></label>
   <div id="status" class="mute"></div>
   <div id="out"></div>
@@ -80,6 +80,7 @@ async function load() {
   $('#out').innerHTML = `
     <div class="cards">
       <div class="card">Net P&amp;L<b class="${cls(s.pnl)}">${inr(s.pnl)}</b></div>
+      <div class="card">Charges (est.)<b class="down">${inr(-s.charges)}</b></div>
       <div class="card">Trades<b>${s.n}</b></div>
       <div class="card">Win rate<b>${s.winRate}%</b></div>
       <div class="card">Avg win / loss<b><span class="up">${inr(s.avgWin)}</span> / <span class="down">${inr(s.avgLoss)}</span></b></div>

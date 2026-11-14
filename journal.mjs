@@ -90,6 +90,27 @@ export function roundTrips(trades) {
 }
 
 const day = ms => new Date(ms).toLocaleDateString('en-CA');
+
+// ponytail: approximate Zerodha-style schedule (Nov 2026); exact charges come from the broker's contract notes
+const RATES = {
+  deliv: { sttBuy: 0.001, sttSell: 0.001, exch: 0.0000297, stamp: 0.00015 },
+  intra: { sttBuy: 0, sttSell: 0.00025, exch: 0.0000297, stamp: 0.00003 },
+  fut: { sttBuy: 0, sttSell: 0.0002, exch: 0.0000173, stamp: 0.00002 },
+  opt: { sttBuy: 0, sttSell: 0.001, exch: 0.0003503, stamp: 0.00003 },
+};
+export const kindOf = t => (/(CE|PE)$/.test(t.symbol) ? 'opt' : /FUT$/.test(t.symbol) ? 'fut' : day(t.openedAt) === day(t.closedAt) ? 'intra' : 'deliv');
+
+// Estimated charges for one round trip: brokerage + STT + exchange + SEBI + GST + stamp (+ DP on delivery sells).
+// ponytail: a trip split across partial fills counts brokerage per piece, so slightly high on heavily split orders
+export function charges(t) {
+  const kind = kindOf(t), r = RATES[kind];
+  const buy = (t.side === 'long' ? t.entry : t.exit) * t.qty;
+  const sell = (t.side === 'long' ? t.exit : t.entry) * t.qty;
+  const brokerage = kind === 'deliv' ? 0 : kind === 'opt' ? 40 : Math.min(20, 0.0003 * buy) + Math.min(20, 0.0003 * sell);
+  const exch = r.exch * (buy + sell), sebi = 1e-6 * (buy + sell);
+  return brokerage + r.sttBuy * buy + r.sttSell * sell + exch + sebi + 0.18 * (brokerage + exch + sebi) + r.stamp * buy
+    + (kind === 'deliv' ? 15.34 * 1.18 : 0);
+}
 const inr = n => `₹${Math.round(n).toLocaleString('en-IN')}`;
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 
@@ -109,7 +130,9 @@ const stat = list => ({
 });
 
 export function report(trips, { revengeMin = 15, busyDay = 5 } = {}) {
-  const sorted = [...trips].sort((a, b) => a.closedAt - b.closedAt);
+  // every stat below is NET of estimated charges
+  const sorted = trips.map(t => { const c = charges(t); return { ...t, gross: t.pnl, charges: c, pnl: t.pnl - c }; })
+    .sort((a, b) => a.closedAt - b.closedAt);
   const wins = sorted.filter(t => t.pnl > 0), losses = sorted.filter(t => t.pnl < 0);
   const total = stat(sorted);
   const avgWin = wins.length ? stat(wins).pnl / wins.length : 0;
@@ -135,7 +158,12 @@ export function report(trips, { revengeMin = 15, busyDay = 5 } = {}) {
   const byWeekday = group(sorted, t => new Date(t.openedAt).toLocaleDateString('en-IN', { weekday: 'short' }));
   const bySymbol = group(sorted, t => t.symbol);
 
+  const totalCharges = sorted.reduce((s, t) => s + t.charges, 0), gross = sorted.reduce((s, t) => s + t.gross, 0);
   const flags = [];
+  if (totalCharges > 0 && sorted.length >= 5)
+    flags.push(gross > 0
+      ? `Charges took ${inr(totalCharges)}, that is ${pct(totalCharges, gross)}% of your ${inr(gross)} gross profit.`
+      : `Charges added ${inr(totalCharges)} on top of a ${inr(gross)} gross result.`);
   if (revenge.n >= 3)
     flags.push(`${revenge.n} trades opened within ${revengeMin} min of a loss: net ${inr(revenge.pnl)}, win rate ${revenge.winRate}% (vs ${calm.winRate}% otherwise).`);
   if (busy.length && normal.length)
@@ -157,7 +185,7 @@ export function report(trips, { revengeMin = 15, busyDay = 5 } = {}) {
   }
 
   return {
-    summary: { ...total, avgWin, avgLoss, maxDD, profitFactor: avgLoss ? stat(wins).pnl / -stat(losses).pnl : null },
-    flags, equity, byHour, byWeekday, bySymbol, byDay,
+    summary: { ...total, gross, charges: totalCharges, avgWin, avgLoss, maxDD, profitFactor: avgLoss ? stat(wins).pnl / -stat(losses).pnl : null },
+    flags, equity, byHour, byWeekday, bySymbol, byDay, trips: sorted,
   };
 }
