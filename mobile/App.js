@@ -7,6 +7,7 @@ import { File } from 'expo-file-system';
 import { parseCsv, toTrades, byOrder, roundTrips, report } from '../journal.mjs';
 import { db } from './db';
 import Signals from './Signals';
+import { useAutoUpdate } from './update';
 
 const LIGHT = { bg: '#f6f4ef', card: '#fff', ink: '#1d1c1a', mute: '#77736b', line: '#e4e0d7', up: '#1f7a4d', down: '#b3361f', accent: '#c98a12' };
 const DARK = { bg: '#141413', card: '#1e1d1b', ink: '#ece9e2', mute: '#9a958b', line: '#2e2c29', up: '#4cc38a', down: '#f07a5f', accent: '#e0a42a' };
@@ -24,6 +25,7 @@ export default function App() {
   const c = useColorScheme() === 'dark' ? DARK : LIGHT;
   const s = useMemo(() => styles(c), [c]);
   const [tab, setTab] = useState('signals');
+  const updating = useAutoUpdate();
   return (
     <SafeAreaProvider>
       <SafeAreaView style={s.root} edges={['top', 'bottom']}>
@@ -35,6 +37,7 @@ export default function App() {
             </Pressable>
           ))}
         </View>
+        {!!updating && <Text style={[s.small, { textAlign: 'center', paddingVertical: 6, color: c.accent }]}>{updating}</Text>}
         <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
           {tab === 'signals' ? <Signals c={c} s={s} /> : <Journal c={c} s={s} />}
         </ScrollView>

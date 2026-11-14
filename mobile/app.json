@@ -2,7 +2,7 @@
   "expo": {
     "name": "Trade Journal",
     "slug": "trade-journal",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -14,13 +14,14 @@
     },
     "android": {
       "package": "com.tradejournal.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive.png",
         "backgroundColor": "#14261d"
       },
       "permissions": [
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
