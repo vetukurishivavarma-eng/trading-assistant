@@ -2,7 +2,8 @@
 // Publish a release (tag vX.Y.Z, .apk attached) and every installed copy offers it on next open.
 // Installs over the old app only if signed with the same key (~/trade-journal-keystore).
 import { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
+import { showDialog } from './dialog';
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -47,10 +48,10 @@ export function useAutoUpdate() {
         const apk = (r.assets || []).find(a => a.name.toLowerCase().endsWith('.apk'));
         if (!apk || !newer(r.tag_name, current)) return;
         asking.current = true;
-        Alert.alert(`Update available: ${r.tag_name}`, `You have ${current}.`, [
+        showDialog(`Update available: ${r.tag_name}`, `You have ${current}.`, [
           { text: 'Later', style: 'cancel', onPress: () => { asking.current = false; } },
           { text: 'Update', onPress: () => install(apk.browser_download_url, r.tag_name, setStatus)
-              .catch(e => Alert.alert('Update failed', String(e?.message ?? e)))
+              .catch(e => showDialog('Update failed', String(e?.message ?? e)))
               .finally(() => { asking.current = false; setStatus(''); }) },
         ]);
       } catch { /* offline: try next time */ }

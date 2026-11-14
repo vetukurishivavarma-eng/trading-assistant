@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
@@ -8,6 +8,7 @@ import { parseCsv, toTrades, byOrder, roundTrips, report } from '../journal.mjs'
 import { db } from './db';
 import Signals from './Signals';
 import { useAutoUpdate } from './update';
+import { DialogHost, showDialog } from './dialog';
 
 const LIGHT = { bg: '#f6f4ef', card: '#fff', ink: '#1d1c1a', mute: '#77736b', line: '#e4e0d7', up: '#1f7a4d', down: '#b3361f', accent: '#c98a12' };
 const DARK = { bg: '#141413', card: '#1e1d1b', ink: '#ece9e2', mute: '#9a958b', line: '#2e2c29', up: '#4cc38a', down: '#f07a5f', accent: '#e0a42a' };
@@ -41,6 +42,7 @@ export default function App() {
         <ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
           {tab === 'signals' ? <Signals c={c} s={s} /> : <Journal c={c} s={s} />}
         </ScrollView>
+        <DialogHost c={c} />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -77,7 +79,7 @@ function Journal({ c, s }) {
   }
 
   function clearAll() {
-    Alert.alert('Delete all trades?', 'This removes every imported trade from this phone.', [
+    showDialog('Delete all trades?', 'This removes every imported trade from this phone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => { db.execSync('DELETE FROM trades'); setStatus(''); setTick(t => t + 1); } },
     ]);

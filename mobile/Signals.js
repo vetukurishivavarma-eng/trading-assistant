@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { NIFTY50, fetchAll, scan, paperStatus } from '../scanner.mjs';
 import { db, getSetting, setSetting } from './db';
+import { showDialog } from './dialog';
 
 const inr = n => (n < 0 ? '−₹' : '₹') + Math.abs(Math.round(n)).toLocaleString('en-IN');
 const day = ms => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -53,13 +54,13 @@ export default function Signals({ c, s }) {
       setResult({ signals, errors, asOf: anyK?.at(-1)?.t, at: Date.now() });
       setPaper(loadPaper());
     } catch (e) {
-      Alert.alert('Scan failed', e.message);
+      showDialog('Scan failed', e.message);
     }
     setBusy('');
   }
 
   function approve(g) {
-    Alert.alert(`Paper trade ${g.symbol}?`,
+    showDialog(`Paper trade ${g.symbol}?`,
       `Pretend-buy ${g.qty} shares at tomorrow's open (about ${inr(g.close)} each).\nStop ${inr(g.stop)} · Target ${inr(g.target)}\n\nNo real money. It tracks how this signal would have done.`,
       [{ text: 'Cancel', style: 'cancel' }, { text: 'Approve', onPress: () => {
         db.runSync('INSERT INTO paper (symbol, setup, name, signal_date, atr, qty, plan_close, created, status) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -70,7 +71,7 @@ export default function Signals({ c, s }) {
   }
 
   function removePaper(p) {
-    Alert.alert('Remove paper trade?', `${p.symbol}, ${p.name}`, [{ text: 'Cancel', style: 'cancel' },
+    showDialog('Remove paper trade?', `${p.symbol}, ${p.name}`, [{ text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => { db.runSync('DELETE FROM paper WHERE id = ?', p.id); setPaper(loadPaper()); } }]);
   }
 
